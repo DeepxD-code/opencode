@@ -883,11 +883,18 @@ const layer = Layer.effect(
       return {
         diffs: files.map((entry) => {
           const stat = stats.get(entry.file)
+          const binary = stat?.binary ?? false
+          const chunk = binary ? undefined : patches.get(entry.file)
+          // Budget-withheld patches keep filename/status/counts and expose
+          // truncated: true so DB rows stay bounded and the UI can collapse.
+          // (Partial trailing-chunk truncation stays unmarked: known limitation.)
+          const withheld = !binary && chunk === undefined
           return {
             ...entry,
             additions: stat?.additions ?? 0,
             deletions: stat?.deletions ?? 0,
-            patch: stat?.binary ? "" : (patches.get(entry.file) ?? VcsPatch.emptyPatch(entry.file)),
+            patch: binary ? "" : (chunk ?? VcsPatch.emptyPatch(entry.file)),
+            ...(withheld ? { truncated: true as const } : {}),
           } satisfies FileDiff.Info
         }),
         patchBytes: Buffer.byteLength(patch.text),
