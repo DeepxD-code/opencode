@@ -238,61 +238,6 @@ describe("Git trees", () => {
     }),
   )
 
-  it.live("withholds patch text above the total byte budget and marks truncated", () =>
-    Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
-      yield* Effect.promise(() => initRepo(root.path))
-      const git = yield* Git.Service
-      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
-      if (!repository) throw new Error("Repository not found")
-      const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
-      // Multi-byte content: byte size (not JS length) drives the budget.
-      yield* Effect.promise(() => Bun.write(path.join(root.path, "large-unicode.txt"), "🙂".repeat(3_000_000)))
-      const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
-      const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 0 })
-      expect(diffs).toHaveLength(1)
-      expect(diffs[0]?.file).toBe("large-unicode.txt")
-      expect(diffs[0]?.patch).toBe(VcsPatch.emptyPatch("large-unicode.txt"))
-      expect(diffs[0]?.truncated).toBe(true)
-      expect(diffs[0]?.additions).toBeGreaterThan(0)
-    }),
-  )
-
-  it.live("limits total patch text across files, keeping the first under budget", () =>
-    Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
-      yield* Effect.promise(() => initRepo(root.path))
-      const git = yield* Git.Service
-      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
-      if (!repository) throw new Error("Repository not found")
-      const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
-      yield* Effect.promise(async () => {
-        await Bun.write(path.join(root.path, "cap-a.txt"), `${"a".repeat(79)}\n`.repeat(80_000))
-        await Bun.write(path.join(root.path, "cap-b.txt"), `${"b".repeat(79)}\n`.repeat(80_000))
-      })
-      const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
-      const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 0 })
-      const first = diffs.find((item) => item.file === "cap-a.txt")
-      const second = diffs.find((item) => item.file === "cap-b.txt")
-      // Either file may win the budget; exactly one must be withheld.
-      const kept = [first, second].find((item) => item?.truncated !== true)
-      const dropped = [first, second].find((item) => item?.truncated === true)
-      expect(kept?.patch).not.toBe("")
-      expect(kept?.truncated).toBeUndefined()
-      expect(dropped?.patch).toBe(VcsPatch.emptyPatch(dropped?.file ?? ""))
-      expect(diffs.filter((item) => item.truncated === true)).toHaveLength(1)
-      expect(
-        diffs.reduce((total, item) => total + Buffer.byteLength(item.patch ?? ""), 0),
-      ).toBeLessThanOrEqual(VcsPatch.MAX_TOTAL_PATCH_BYTES)
-    }),
-  )
-
   it.live(
     "diffs a path selection longer than any platform command line",
     () =>

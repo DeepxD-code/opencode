@@ -885,10 +885,9 @@ const layer = Layer.effect(
           const stat = stats.get(entry.file)
           const binary = stat?.binary ?? false
           const chunk = binary ? undefined : patches.get(entry.file)
-          // Budget-withheld patches keep filename/status/counts and expose
-          // truncated: true so DB rows stay bounded and the UI can collapse.
-          // (Partial trailing-chunk truncation stays unmarked: known limitation.)
-          const withheld = !binary && chunk === undefined
+          // Only a cut-off patch output means the budget withheld this file;
+          // otherwise a missing chunk is a parse failure, not a truncation.
+          const withheld = patch.truncated && !binary && chunk === undefined
           return {
             ...entry,
             additions: stat?.additions ?? 0,

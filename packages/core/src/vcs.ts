@@ -13,7 +13,7 @@ import { Location } from "./location.js"
 import { Project } from "./project.js"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
-import { emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
+import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
 export { Base, BranchList, FileStatus, Info, Mode }
 
@@ -244,10 +244,9 @@ const layer = Layer.effect(
         let total = 0
         return rows.map((row) => {
           const bytes = Buffer.byteLength(row.patch)
-          // Per-file and total budgets use UTF-8 bytes, not JS string length,
-          // so multi-byte content cannot slip past the cap. Withheld patches
-          // keep filename/status/counts and expose truncated: true.
-          if (bytes > MAX_PATCH_BYTES || total + bytes > MAX_TOTAL_PATCH_BYTES)
+          // The total check already uses UTF-8 bytes; a withheld patch keeps
+          // filename/status/counts and exposes truncated: true.
+          if (total + bytes > MAX_TOTAL_PATCH_BYTES)
             return { ...row, patch: emptyPatch(row.file), truncated: true as const }
           total += bytes
           return row
